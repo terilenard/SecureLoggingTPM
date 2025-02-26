@@ -1,0 +1,21 @@
+{
+    "profile_name": "P_ECCP256SHA256",
+    "profile_dir": "/home/teri/projects/SecureLoggingTPM/fapi-config",
+    "ek_cert_less": "yes",
+    "user_dir": "/home/teri/projects/SecureLoggingTPM/fapi-config/keystore",
+    "system_dir": "/home/teri/projects/SecureLoggingTPM/fapi-config/keystore",
+    "tcti": "mssim:port=2321",
+    "system_pcrs" : [0, 1, 2, 3, 4, 5, 6, 7],
+    "log_dir" : "/home/teri/projects/SecureLoggingTPM/fapi-config/logs",
+    "nv_time_path": "/nv/Owner/nv_time",
+    "nv_sign_path": "/nv/Owner/nv_sign",
+    "nv_epoch_path": "/nv/Owner/nv_epoch/",
+    "ai_key": "/HS/SRK/key_aik",
+    "sign_key": "/HS/SRK/key_sign",
+    "aik_attributes": "sign, restricted, 0x81000005",
+
+    "mqtt-user": "tpm_logger",
+    "mqtt-passwd": "tpm_logger",
+    "mqtt-host": "127.0.0.1",
+    "mqtt-port": 1883
+}
