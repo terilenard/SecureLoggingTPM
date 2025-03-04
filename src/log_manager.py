@@ -1,4 +1,6 @@
 import time
+import threading
+
 
 from logger import Logger
 from mqtt_client import MQTTClient
@@ -33,6 +35,9 @@ class LogManager:
                                 on_message_callback=self._on_new_log)
 
         self._should_run = False
+        
+        # Timer to periodically check to safe logs to file
+        self._log_timer = threading.Timer(5, self._on_log_to_file) 
 
     def _on_new_log(self, mqttc, obj, msg):
 
@@ -40,6 +45,13 @@ class LogManager:
             commit = self._logger.log(msg.payload)
             print(commit)
 
+    def _on_log_to_file(self):
+
+        if len(self._logger.get_logs() < Logger.LOG_COUNT_LIMIT):
+            return
+        else:
+            # TODO: write to file
+            pass
 
     def start(self):
         if self._logger:
@@ -52,6 +64,7 @@ class LogManager:
             app_logger.error("Logger error setup.")
 
         self._mqtt_client.connect()
+        self._log_timer.start()
 
     def run(self):
         self._should_run = True 
@@ -73,6 +86,8 @@ class LogManager:
             self._mqtt_client.stop()
             app_logger.info("Closed MQTT cliend.")
 
+        if self._log_timer:
+            self._log_timer.cancel()
 
 
 if __name__ == "__main__":

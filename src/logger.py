@@ -1,5 +1,6 @@
 import pprint
-import json
+import pickle
+
 
 from tpm2_pytss import *
 
@@ -10,6 +11,8 @@ from epoch_model import EpochModel
 class Logger(object):
 
     PCR = 23
+    VERIFY_PCR = 24
+    LOG_COUNT_LIMIT = 10
 
     def __init__(self, profile_name, profile_dir,
                  user_dir, system_dir, log_dir,
@@ -32,6 +35,9 @@ class Logger(object):
         self._ai_key =  f"/{self._ctx.config.profile_name}{ai_path}"   # Keys to sign epoch
         self._aik_attributes = aik_attributes
 
+    def get_logs(self):
+        return self._logs
+    
     def setup(self, do_provision=False, create_nv=False, create_aik=False, create_sign=False) -> bool:
 
         if not self._ctx:
@@ -73,7 +79,7 @@ class Logger(object):
         if self._config:
             self._config.close()
 
-    def log(self, data):
+    def log(self, data: bytes) -> LogModel:
 
         # Create a log model to store the secure log fileds
 
@@ -98,10 +104,56 @@ class Logger(object):
             current_log.set_new_chain(False)
 
         # Update the in memory logs
-        self._logs.append(current_log)
+        self._logs.append(current_log.as_dict())
         return current_log
-        
-    def create_log_epoch(self):
+
+    def verify_epoch(self, epoch : EpochModel):
+
+        # 1. Verify signature of the epoch
+
+        data_to_hash = b''
+        for entry in epoch.commits:
+            data_to_hash = data_to_hash + entry["previous_pcr"]
+            data_to_hash = data_to_hash + entry["pcr"]
+            data_to_hash = data_to_hash + entry["signature"]
+
+        digest = sha256(data_to_hash)
+
+        verified = False
+        try:
+            self._ctx.verify_signature(self._sign_key,
+                                        digest,
+                                        epoch.aik_signature)
+            verified = True
+        except TSS2_Exception:
+            verified = False
+
+        if not verified:
+            print("Epoch signature was not verified.")
+            return False
+
+        # For each log, check signature
+
+        for entry in epoch.commits:
+
+            pcr = entry["pcr"]
+            signature = entry["signature"]
+
+            try:
+                self._ctx.verify_signature(self._sign_key, pcr, signature)
+                verified = True
+            except TSS2_Exception:
+                verified = False
+        # Check PCR state
+
+        # Each pcr must be linked with the next
+        # If in logmodel is_new_chain is set to True
+        # use an empty PCR. Otherwise continue with 
+        # the current one from the previous epoch.
+
+        return verified
+
+    def create_log_epoch(self) -> EpochModel:
 
         # Cannot call on empty list of logs
         if len(self._logs) == 0:
@@ -110,18 +162,18 @@ class Logger(object):
         current_epoch = EpochModel()
         current_epoch.set_commits(self._logs)
 
-        import pickle
+        data_to_hash = b''
+        for entry in current_epoch.commits:
+            data_to_hash = data_to_hash + entry["previous_pcr"]
+            data_to_hash = data_to_hash + entry["pcr"]
+            data_to_hash = data_to_hash + entry["signature"]
 
-        as_bytes = pickle.dumps(self._logs)
-        digest = sha256(as_bytes)
+        digest = sha256(data_to_hash)
         signature, _, _ = self._ctx.sign(path=self._sign_key, digest=digest)
         current_epoch.set_aik_signature(signature)
 
         return current_epoch
-
-    def verify_log(self):
-        pass
-
+   
 
 if __name__ == '__main__':
 
@@ -141,16 +193,19 @@ if __name__ == '__main__':
     
     controller.setup()
 
-    commit = controller.log(b"\x11" * 100)
-    pprint.pprint(commit.as_dict())
-
-    commit = controller.log(b"\x21" * 100)
-    pprint.pprint(commit.as_dict())
-
-    commit = controller.log(b"\x31" * 100)
-    pprint.pprint(commit.as_dict())
+    controller.log(b"\x11" * 10)
+    controller.log(b"\x11" * 10)
+    controller.log(b"\x11" * 10)
+    # pprint.pprint(commit.as_dict())
 
     epoch = controller.create_log_epoch()
     pprint.pprint(epoch.as_dict())
-    
+
+    verified = controller.verify_epoch(epoch)
+    assert (verified == True) # Test that epoch is verified
+
+    # Test after modification of the content of one log if the signature are still valid
+    epoch.commits[0]["pcr"] = b"\x12"
+    verified = controller.verify_epoch(epoch)
+    assert (verified == False) # Test that epoch is verified
     controller.close()
