@@ -2,7 +2,10 @@
 
 
 
-## Documentation
+## Getting started
+
+To get started with this project, visit the [documentation page](https://secureloggingtpm-documentation.readthedocs.io/en/latest/).
+
 
 ## Research paper
 
